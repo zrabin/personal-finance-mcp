@@ -1,0 +1,4 @@
+,ID,Datetime,Type,Status,Note,From,To,Amount (total),Amount (tip),Amount (tax),Tax Rate,Tax Exempt,Funding Source,Destination,Beginning Balance,Ending Balance,Statement Period Venmo Fees,Terminal Location,Year to Date Venmo Fees,Disclaimer
+,t_venmo_001,2026-01-15T10:30:00,Payment,Complete,Coffee,Zach Rabin,Blue Bottle Coffee,"- $5.50",,,,,,,,,,,,
+,t_venmo_002,2026-01-16T14:00:00,Charge,Complete,Dinner split,Jane Doe,Zach Rabin,"+ $25.00",,,,,,,,,,,,
+,t_venmo_003,2026-01-17T09:00:00,Payment,Complete,Rent,Zach Rabin,Landlord,"- $1,200.00",,,,,,,,,,,,

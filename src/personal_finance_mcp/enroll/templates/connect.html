@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connect Your Bank Account</title>
+    <style>
+        body { font-family: -apple-system, system-ui, sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px; }
+        h1 { color: #1a1a1a; }
+        #status { margin-top: 20px; padding: 16px; border-radius: 8px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .waiting { background: #d1ecf1; color: #0c5460; }
+        button { background: #0066ff; color: white; border: none; padding: 12px 24px; border-radius: 6px; font-size: 16px; cursor: pointer; }
+        button:hover { background: #0052cc; }
+    </style>
+</head>
+<body>
+    <h1>Connect Your Bank Account</h1>
+    <p>Click the button below to securely link your bank account via Teller.</p>
+    <button id="connect-btn">Connect Account</button>
+    <div id="status" class="waiting">Waiting to connect...</div>
+
+    <script src="https://cdn.teller.io/connect/connect.js"></script>
+    <script>
+        const appId = "{{APPLICATION_ID}}";
+        const handler = TellerConnect.setup({
+            applicationId: appId,
+            onSuccess: function(enrollment) {
+                document.getElementById("status").className = "success";
+                document.getElementById("status").textContent = "Connected! You can close this window.";
+                fetch("/callback", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify(enrollment)
+                });
+            },
+            onFailure: function(failure) {
+                document.getElementById("status").className = "error";
+                document.getElementById("status").textContent = "Connection failed: " + failure.message;
+            },
+            onExit: function() {
+                document.getElementById("status").textContent = "Connection cancelled.";
+            }
+        });
+        document.getElementById("connect-btn").addEventListener("click", function() {
+            handler.open();
+        });
+    </script>
+</body>
+</html>

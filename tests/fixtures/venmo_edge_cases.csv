@@ -1,0 +1,4 @@
+,ID,Datetime,Type,Status,Note,From,To,Amount (total),Amount (tip),Amount (tax),Tax Rate,Tax Exempt,Funding Source,Destination,Beginning Balance,Ending Balance,Statement Period Venmo Fees,Terminal Location,Year to Date Venmo Fees,Disclaimer
+,t_venmo_010,2026-02-01T08:00:00,Payment,Complete,,,,"- $10.00",,,,,,,,,,,,
+,,,,,,,,,,,,,,,,,,,,
+,t_venmo_011,2026-02-02T12:00:00,Transfer,Complete,Transfer to bank,Zach Rabin,,"- $500.00",,,,,,,,,,,,
