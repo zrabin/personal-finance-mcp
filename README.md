@@ -23,31 +23,39 @@ pip3 install -e ".[dev]"
 
 1. Sign up at [teller.io](https://teller.io) (free for personal use)
 2. Create an application and download your certificate and private key
-3. Create a `.env` file:
+3. Store the certs in a secure location outside the repo:
 
 ```bash
-cp .env.example .env
-# Edit .env with your Teller credentials
+mkdir -p ~/.finance_mcp/certs
+cp /path/to/certificate.pem ~/.finance_mcp/certs/
+cp /path/to/private_key.pem ~/.finance_mcp/certs/
+chmod 600 ~/.finance_mcp/certs/*.pem
 ```
 
 ### 3. Add to Claude
 
-Add to your Claude config (`~/.claude.json` or Claude Desktop config):
+Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
 
 ```json
 {
   "mcpServers": {
     "finance": {
-      "command": "python3",
+      "command": "/absolute/path/to/python3",
       "args": ["-m", "personal_finance_mcp"],
       "env": {
         "TELLER_APPLICATION_ID": "your-app-id",
-        "TELLER_CERTIFICATE": "/path/to/certificate.pem",
-        "TELLER_PRIVATE_KEY": "/path/to/private_key.pem"
+        "TELLER_CERTIFICATE": "/Users/yourname/.finance_mcp/certs/certificate.pem",
+        "TELLER_PRIVATE_KEY": "/Users/yourname/.finance_mcp/certs/private_key.pem"
       }
     }
   }
 }
+```
+
+**Important:** Use the absolute path to the Python binary where you installed the package. Claude Desktop doesn't inherit your shell's PATH, so `python3` may resolve to the system Python which won't have the package. Find the correct path with:
+
+```bash
+which python3
 ```
 
 ### 4. Connect Your Accounts

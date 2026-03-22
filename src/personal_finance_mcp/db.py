@@ -13,6 +13,7 @@ from typing import Any
 
 SCHEMA_VERSION = 1
 
+
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER NOT NULL
@@ -86,12 +87,12 @@ class Database:
     """SQLite database wrapper with schema management."""
 
     def __init__(self, db_path: str) -> None:
-        self.db_path = db_path
+        self.db_path = str(Path(db_path).expanduser())
         self._ensure_directory()
-        is_new = not Path(db_path).exists()
-        self.conn = sqlite3.connect(db_path)
+        is_new = not Path(self.db_path).exists()
+        self.conn = sqlite3.connect(self.db_path)
         if is_new:
-            os.chmod(db_path, 0o600)
+            os.chmod(self.db_path, 0o600)
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA foreign_keys=ON")
         self._init_schema()
@@ -216,12 +217,17 @@ class Database:
         min_amount: float | None = None,
         max_amount: float | None = None,
         search: str | None = None,
+        exclude_descriptions: list[str] | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> dict:
         conditions = []
         params: list = []
 
+        if exclude_descriptions:
+            for pattern in exclude_descriptions:
+                conditions.append("(description IS NULL OR description NOT LIKE ?)")
+                params.append(f"%{pattern}%")
         if account_id:
             conditions.append("account_id = ?")
             params.append(account_id)
@@ -310,11 +316,16 @@ class Database:
         end_date: str,
         account_id: str | None = None,
         exclude_transfers: bool = True,
+        exclude_descriptions: list[str] | None = None,
     ) -> list[dict]:
         conditions = ["date >= ?", "date <= ?", "amount < 0"]
         params: list = [start_date, end_date]
         if exclude_transfers:
             conditions.append("type != 'transfer'")
+        if exclude_descriptions:
+            for pattern in exclude_descriptions:
+                conditions.append("(description IS NULL OR description NOT LIKE ?)")
+                params.append(f"%{pattern}%")
         if account_id:
             conditions.append("account_id = ?")
             params.append(account_id)
@@ -332,9 +343,14 @@ class Database:
         start_date: str,
         end_date: str,
         account_id: str | None = None,
+        exclude_descriptions: list[str] | None = None,
     ) -> dict:
         conditions = ["date >= ?", "date <= ?"]
         params: list = [start_date, end_date]
+        if exclude_descriptions:
+            for pattern in exclude_descriptions:
+                conditions.append("(description IS NULL OR description NOT LIKE ?)")
+                params.append(f"%{pattern}%")
         if account_id:
             conditions.append("account_id = ?")
             params.append(account_id)
@@ -353,9 +369,14 @@ class Database:
         self,
         months: int = 6,
         account_id: str | None = None,
+        exclude_descriptions: list[str] | None = None,
     ) -> list[dict]:
         conditions = []
         params: list = []
+        if exclude_descriptions:
+            for pattern in exclude_descriptions:
+                conditions.append("(description IS NULL OR description NOT LIKE ?)")
+                params.append(f"%{pattern}%")
         if account_id:
             conditions.append("account_id = ?")
             params.append(account_id)
