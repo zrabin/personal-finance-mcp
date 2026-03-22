@@ -32,7 +32,11 @@ cp /path/to/private_key.pem ~/.finance_mcp/certs/
 chmod 600 ~/.finance_mcp/certs/*.pem
 ```
 
-### 3. Add to Claude
+### 3. Configure Credentials
+
+There are two ways to provide your Teller credentials:
+
+#### Option A: Claude Desktop Config (recommended)
 
 Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
 
@@ -56,6 +60,15 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
 
 ```bash
 which python3
+```
+
+#### Option B: `.env` file
+
+Useful for development or running the server outside of Claude Desktop:
+
+```bash
+cp .env.example .env
+# Edit .env with your Teller credentials
 ```
 
 ### 4. Connect Your Accounts
