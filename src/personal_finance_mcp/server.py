@@ -77,7 +77,7 @@ def create_server(db_path: str | None = None) -> Server:
             ),
             Tool(
                 name="get_transactions",
-                description="Query transactions with flexible filters",
+                description="Query transactions with flexible filters. Amounts use sign convention: negative = money out (expenses, payments, debits), positive = money in (income, deposits, credits). To get only cash-out transactions, use max_amount=0. To get only cash-in, use min_amount=0.",
                 inputSchema={
                     "type": "object",
                     "properties": {
@@ -85,9 +85,10 @@ def create_server(db_path: str | None = None) -> Server:
                         "start_date": {"type": "string", "description": "Start date (YYYY-MM-DD)"},
                         "end_date": {"type": "string", "description": "End date (YYYY-MM-DD)"},
                         "category": {"type": "string", "description": "Filter by category"},
-                        "min_amount": {"type": "number", "description": "Minimum amount"},
-                        "max_amount": {"type": "number", "description": "Maximum amount"},
+                        "min_amount": {"type": "number", "description": "Minimum amount (use 0 to get only cash-in/positive transactions)"},
+                        "max_amount": {"type": "number", "description": "Maximum amount (use 0 to get only cash-out/negative transactions)"},
                         "search": {"type": "string", "description": "Search description and counterparty"},
+                        "exclude_descriptions": {"type": "array", "items": {"type": "string"}, "description": "Exclude transactions whose description contains any of these substrings (e.g. ['CHASE CREDIT CRD AUTOPAY', 'AUTOMATIC PAYMENT'])"},
                         "limit": {"type": "integer", "description": "Max results (default 50, 0=no limit)"},
                         "offset": {"type": "integer", "description": "Skip N results"},
                     },
@@ -103,19 +104,21 @@ def create_server(db_path: str | None = None) -> Server:
                         "end_date": {"type": "string", "description": "End date (YYYY-MM-DD)"},
                         "account_id": {"type": "string", "description": "Filter by account"},
                         "exclude_transfers": {"type": "boolean", "description": "Exclude transfers (default true)"},
+                        "exclude_descriptions": {"type": "array", "items": {"type": "string"}, "description": "Exclude transactions whose description contains any of these substrings (e.g. ['CHASE CREDIT CRD AUTOPAY', 'AUTOMATIC PAYMENT'])"},
                     },
                     "required": ["start_date", "end_date"],
                 },
             ),
             Tool(
                 name="get_cash_flow",
-                description="Get income vs expenses summary for a time period",
+                description="Get income vs expenses summary for a time period. Income = sum of positive amounts (money in), expenses = sum of negative amounts (money out).",
                 inputSchema={
                     "type": "object",
                     "properties": {
                         "start_date": {"type": "string", "description": "Start date (YYYY-MM-DD)"},
                         "end_date": {"type": "string", "description": "End date (YYYY-MM-DD)"},
                         "account_id": {"type": "string", "description": "Filter by account"},
+                        "exclude_descriptions": {"type": "array", "items": {"type": "string"}, "description": "Exclude transactions whose description contains any of these substrings (e.g. ['CHASE CREDIT CRD AUTOPAY', 'AUTOMATIC PAYMENT'])"},
                     },
                     "required": ["start_date", "end_date"],
                 },
@@ -128,6 +131,7 @@ def create_server(db_path: str | None = None) -> Server:
                     "properties": {
                         "months": {"type": "integer", "description": "Number of months (default 6)"},
                         "account_id": {"type": "string", "description": "Filter by account"},
+                        "exclude_descriptions": {"type": "array", "items": {"type": "string"}, "description": "Exclude transactions whose description contains any of these substrings (e.g. ['CHASE CREDIT CRD AUTOPAY', 'AUTOMATIC PAYMENT'])"},
                     },
                 },
             ),
@@ -229,6 +233,12 @@ async def _handle_sync(config: Config, db: Database) -> dict:
                     transactions = await client.get_transactions(
                         token, account["id"], from_date=from_date
                     )
+                    # Credit card accounts: Teller reports charges as positive
+                    # (increasing balance owed), but from the user's perspective
+                    # charges are money out. Flip signs so negative = spent.
+                    if account.get("type") == "credit":
+                        for t in transactions:
+                            t["amount"] = -t["amount"]
                     inserted = db.insert_transactions(transactions)
                     total_transactions += inserted
                 except TellerAPIError as e:
@@ -310,6 +320,7 @@ def _handle_get_transactions(db: Database, arguments: dict) -> dict:
         min_amount=arguments.get("min_amount"),
         max_amount=arguments.get("max_amount"),
         search=arguments.get("search"),
+        exclude_descriptions=arguments.get("exclude_descriptions"),
         limit=arguments.get("limit", 50),
         offset=arguments.get("offset", 0),
     )
@@ -321,6 +332,7 @@ def _handle_get_spending_summary(db: Database, arguments: dict) -> dict:
         end_date=arguments["end_date"],
         account_id=arguments.get("account_id"),
         exclude_transfers=arguments.get("exclude_transfers", True),
+        exclude_descriptions=arguments.get("exclude_descriptions"),
     )
     total = sum(c["total"] for c in categories)
     return {"categories": categories, "total_spending": total}
@@ -331,6 +343,7 @@ def _handle_get_cash_flow(db: Database, arguments: dict) -> dict:
         start_date=arguments["start_date"],
         end_date=arguments["end_date"],
         account_id=arguments.get("account_id"),
+        exclude_descriptions=arguments.get("exclude_descriptions"),
     )
 
 
@@ -338,6 +351,7 @@ def _handle_get_monthly_trend(db: Database, arguments: dict) -> dict:
     months = db.get_monthly_trend(
         months=arguments.get("months", 6),
         account_id=arguments.get("account_id"),
+        exclude_descriptions=arguments.get("exclude_descriptions"),
     )
     return {"months": months}
 

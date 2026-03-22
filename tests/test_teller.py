@@ -65,7 +65,7 @@ class TestTellerClient:
                 {
                     "id": "txn_1",
                     "account_id": "acc_123",
-                    "amount": "25.50",
+                    "amount": "-25.50",
                     "date": "2026-03-15",
                     "description": "Coffee Shop",
                     "details": {"category": "dining"},
@@ -82,7 +82,7 @@ class TestTellerClient:
                 "tok_test", "acc_123"
             )
             assert len(transactions) == 1
-            assert transactions[0]["amount"] == -25.50  # card_payment = debit
+            assert transactions[0]["amount"] == -25.50  # Teller provides signed amounts
             assert transactions[0]["category"] == "dining"
 
     @pytest.mark.asyncio
@@ -95,25 +95,29 @@ class TestTellerClient:
                 await teller_client.get_accounts("bad_token")
 
     @pytest.mark.asyncio
-    async def test_normalize_debit_types(self, teller_client):
-        """Debit transaction types should produce negative amounts."""
+    async def test_normalize_preserves_teller_sign(self, teller_client):
+        """Teller API provides signed amounts — normalization should preserve them."""
         mock_response = httpx.Response(
             200,
             json=[
-                {"id": "t1", "account_id": "a1", "amount": "100.00",
+                {"id": "t1", "account_id": "a1", "amount": "-100.00",
                  "date": "2026-01-01", "description": "Fee", "details": {},
                  "type": "fee", "status": "posted", "counterparty": {}},
                 {"id": "t2", "account_id": "a1", "amount": "50.00",
                  "date": "2026-01-01", "description": "Deposit", "details": {},
                  "type": "deposit", "status": "posted", "counterparty": {}},
+                {"id": "t3", "account_id": "a1", "amount": "5701.85",
+                 "date": "2026-01-01", "description": "Payroll", "details": {},
+                 "type": "ach", "status": "posted", "counterparty": {}},
             ],
         )
         with patch.object(
             teller_client, "_request", return_value=mock_response
         ):
             txns = await teller_client.get_transactions("tok", "a1")
-            assert txns[0]["amount"] == -100.0  # fee = debit
-            assert txns[1]["amount"] == 50.0    # deposit = credit
+            assert txns[0]["amount"] == -100.0   # fee: Teller sends negative
+            assert txns[1]["amount"] == 50.0     # deposit: Teller sends positive
+            assert txns[2]["amount"] == 5701.85  # incoming ACH: Teller sends positive
 
 
 class TestRetryOn429:

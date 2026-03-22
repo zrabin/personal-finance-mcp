@@ -12,18 +12,6 @@ import httpx
 
 TELLER_API_BASE = "https://api.teller.io"
 
-# Transaction types that represent money leaving the account.
-# NOTE: "transfer" is included here as the default assumption — most transfers
-# out of an account are debits. However, transfers can go both directions;
-# incoming transfers would need special handling if Teller doesn't distinguish them.
-DEBIT_TYPES = {
-    "card_payment", "ach", "fee", "wire", "atm", "transfer",
-    "check", "payment", "withdrawal",
-}
-# Transaction types that represent money entering the account
-CREDIT_TYPES = {
-    "deposit", "interest", "credit", "refund",
-}
 
 # Retry configuration for rate-limited requests
 _MAX_RETRIES = 3
@@ -155,15 +143,9 @@ class TellerClient:
 
     def _normalize_transaction(self, raw: dict) -> dict:
         """Normalize a Teller transaction to unified schema."""
+        # Teller API returns signed amounts: negative = money out, positive = money in
         amount = float(raw.get("amount", "0"))
         txn_type = raw.get("type", "")
-
-        # Apply sign convention
-        if txn_type in DEBIT_TYPES:
-            amount = -abs(amount)
-        elif txn_type in CREDIT_TYPES:
-            amount = abs(amount)
-        # Unknown types: leave as-is (positive)
 
         details = raw.get("details") or {}
         counterparty = raw.get("counterparty") or {}

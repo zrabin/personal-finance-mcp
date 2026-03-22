@@ -1,7 +1,8 @@
 import json
 import pytest
-from unittest.mock import AsyncMock, patch
-from personal_finance_mcp.server import create_server
+from unittest.mock import AsyncMock, patch, MagicMock
+from personal_finance_mcp.server import create_server, _handle_sync
+from personal_finance_mcp.config import Config
 from personal_finance_mcp.db import Database
 
 
@@ -136,3 +137,88 @@ class TestToolHandlers:
         result2 = _handle_import_venmo(db, {"file_path": fixture_path})
         assert result2["new_transactions"] == 0
         assert result2["duplicates_skipped"] == 3
+
+
+class TestSyncCreditCardSignFlip:
+    """Credit card transactions should have signs flipped during sync."""
+
+    @pytest.mark.asyncio
+    async def test_credit_card_charges_become_negative(self, tmp_db):
+        db = Database(tmp_db)
+        db.save_enrollment("enr_1", "tok_test", "Chase")
+
+        mock_accounts = [
+            {"id": "cc_1", "enrollment_id": "enr_1",
+             "institution": "Chase", "name": "Chase Sapphire",
+             "type": "credit", "subtype": "credit_card",
+             "last_four": "5678", "status": "open"},
+        ]
+        # Teller returns charges as positive on credit cards
+        mock_transactions = [
+            {"id": "cc_t1", "account_id": "cc_1", "amount": 75.0,
+             "date": "2026-03-10", "description": "Restaurant",
+             "category": "dining", "type": "card_payment",
+             "status": "posted", "counterparty": "Sushi Place", "source": "teller"},
+            {"id": "cc_t2", "account_id": "cc_1", "amount": -500.0,
+             "date": "2026-03-15", "description": "Payment Thank You",
+             "category": "transfer", "type": "ach",
+             "status": "posted", "counterparty": None, "source": "teller"},
+        ]
+
+        config = MagicMock(spec=Config)
+        config.teller_certificate = "cert.pem"
+        config.teller_private_key = "key.pem"
+
+        with patch("personal_finance_mcp.server.TellerClient") as MockClient:
+            instance = MockClient.return_value
+            instance.get_accounts = AsyncMock(return_value=mock_accounts)
+            instance.get_account_balances = AsyncMock(
+                return_value={"available": None, "ledger": 1200.0}
+            )
+            instance.get_transactions = AsyncMock(return_value=mock_transactions)
+
+            result = await _handle_sync(config, db)
+
+        assert result["status"] == "success"
+        txns = db.get_transactions(account_id="cc_1")["transactions"]
+        # Charge should be flipped: 75.0 → -75.0 (money out)
+        charge = next(t for t in txns if t["id"] == "cc_t1")
+        assert charge["amount"] == -75.0
+        # Payment should be flipped: -500.0 → 500.0 (money in to card)
+        payment = next(t for t in txns if t["id"] == "cc_t2")
+        assert payment["amount"] == 500.0
+
+    @pytest.mark.asyncio
+    async def test_depository_accounts_not_flipped(self, tmp_db):
+        db = Database(tmp_db)
+        db.save_enrollment("enr_1", "tok_test", "Chase")
+
+        mock_accounts = [
+            {"id": "chk_1", "enrollment_id": "enr_1",
+             "institution": "Chase", "name": "Chase Checking",
+             "type": "depository", "subtype": "checking",
+             "last_four": "1234", "status": "open"},
+        ]
+        mock_transactions = [
+            {"id": "chk_t1", "account_id": "chk_1", "amount": -50.0,
+             "date": "2026-03-10", "description": "Coffee",
+             "category": "dining", "type": "card_payment",
+             "status": "posted", "counterparty": "Starbucks", "source": "teller"},
+        ]
+
+        config = MagicMock(spec=Config)
+        config.teller_certificate = "cert.pem"
+        config.teller_private_key = "key.pem"
+
+        with patch("personal_finance_mcp.server.TellerClient") as MockClient:
+            instance = MockClient.return_value
+            instance.get_accounts = AsyncMock(return_value=mock_accounts)
+            instance.get_account_balances = AsyncMock(
+                return_value={"available": 2500.0, "ledger": 2600.0}
+            )
+            instance.get_transactions = AsyncMock(return_value=mock_transactions)
+
+            result = await _handle_sync(config, db)
+
+        txns = db.get_transactions(account_id="chk_1")["transactions"]
+        assert txns[0]["amount"] == -50.0  # unchanged
